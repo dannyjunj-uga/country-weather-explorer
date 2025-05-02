@@ -2,55 +2,284 @@ package cs1302.api;
 
 import javafx.application.Application;
 import javafx.application.Platform;
-import javafx.scene.control.Label;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.geometry.Pos;
+import javafx.scene.Scene;
+import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.layout.VBox;
-import javafx.scene.Scene;
+import javafx.scene.layout.*;
 import javafx.stage.Stage;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.net.http.HttpResponse.BodyHandlers;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
 /**
- * REPLACE WITH NON-SHOUTING DESCRIPTION OF YOUR APP.
+ * A JavaFX application that allows users to select a country and view
+ * its basic information and current weather conditions. The app fetches
+ * data from the REST Countries API and the OpenWeatherMap API, and displays
+ * it in a clean, structured GUI with country and weather details.
  */
 public class ApiApp extends Application {
-    Stage stage;
-    Scene scene;
-    VBox root;
+
+    private static final HttpClient HTTPCLIENT = HttpClient.newBuilder()
+        .version(HttpClient.Version.HTTP_2)
+        .followRedirects(HttpClient.Redirect.NORMAL)
+        .build();
+    private static final Gson GSON = new GsonBuilder()
+        .setPrettyPrinting()
+        .create();
+    private static final String WEATHER_API_KEY = "f215fe56b58b9e106899d6a4bd02acdd";
+
+    private ListView<String> countryList;
+    private ObservableList<String> countryNames = FXCollections.observableArrayList();
+    private Label capitalLabel, populationLabel, currencyLabel, tempLabel, feelsLikeLabel,
+        humidityLabel, windLabel, conditionLabel, weatherHeader, countryHeader;
+    private ImageView flagImageView, weatherIcon;
+    private ProgressIndicator loadingSpinner;
 
     /**
-     * Constructs an {@code ApiApp} object. This default (i.e., no argument)
-     * constructor is executed in Step 2 of the JavaFX Application Life-Cycle.
+     * Initializes the JavaFX application. Builds and arranges all UI components including
+     * the country selector, loading spinner, and information panels. Sets up the stage
+     * and scene, and triggers loading of country data.
+     *
+     * @param stage the primary stage for this application, onto which
+     *              the application scene is set.
      */
-    public ApiApp() {
-        root = new VBox();
-    } // ApiApp
-
-    /** {@inheritDoc} */
     @Override
     public void start(Stage stage) {
+        Label title = new Label("🌍 Country & Weather Explorer 🌍");
+        title.setStyle("-fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: white;");
+        countryList = new ListView<>(countryNames);
+        countryList.setPrefHeight(200);
+        countryList.setStyle("-fx-border-color: #ccc;");
 
-        this.stage = stage;
+        Button fetchButton = new Button("Get Info");
+        fetchButton.setOnAction(e -> {
+            String selected = countryList.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                fetchAndDisplay(selected);
+            }
+        });
 
-        // demonstrate how to load local asset using "file:resources/"
-        Image bannerImage = new Image("file:resources/readme-banner.png");
-        ImageView banner = new ImageView(bannerImage);
-        banner.setPreserveRatio(true);
-        banner.setFitWidth(640);
+        countryHeader = new Label("Country Info");
+        countryHeader.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: white");
+        countryHeader.setPrefWidth(220);
+        countryHeader.setWrapText(true);
 
-        // some labels to display information
-        Label notice = new Label("Modify the starter code to suit your needs.");
+        capitalLabel = new Label("Capital: ");
+        populationLabel = new Label("Population: ");
+        currencyLabel = new Label("Currency: ");
 
-        // setup scene
-        root.getChildren().addAll(banner, notice);
-        scene = new Scene(root);
+        flagImageView = new ImageView();
+        flagImageView.setFitWidth(150);
+        flagImageView.setPreserveRatio(true);
 
-        // setup stage
-        stage.setTitle("ApiApp!");
+        Region spacer = new Region();
+        spacer.setMinHeight(15);
+
+        VBox countryBox = new VBox(5, countryHeader, capitalLabel,
+            populationLabel, currencyLabel, spacer, flagImageView);
+        countryBox.setStyle("-fx-padding: 10; " +
+            "-fx-background-color: #2c2c2c; -fx-border-color: #444;");
+        countryBox.setAlignment(Pos.TOP_LEFT);
+        countryBox.setPrefSize(250,300);
+        countryBox.setMinSize(250,300);
+        countryBox.setMaxSize(250,300);
+
+        weatherHeader = new Label("Capital's Current Weather");
+        weatherHeader.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: white;");
+        weatherHeader.setPrefWidth(220);
+        weatherHeader.setWrapText(true);
+
+        tempLabel = new Label("Temp: ");
+        feelsLikeLabel = new Label("Feels Like: ");
+        humidityLabel = new Label("Humidity: ");
+        windLabel = new Label("Wind: ");
+        conditionLabel = new Label("Condition: ");
+        weatherIcon = new ImageView();
+        weatherIcon.setFitWidth(100);
+        weatherIcon.setPreserveRatio(true);
+
+        loadingSpinner = new ProgressIndicator();
+        loadingSpinner.setVisible(false);
+        loadingSpinner.setPrefSize(50, 50);
+
+        HBox spinnerBox = new HBox(loadingSpinner);
+        spinnerBox.setAlignment(Pos.CENTER);
+
+        VBox weatherBox = new VBox(5, weatherHeader, tempLabel, feelsLikeLabel, humidityLabel,
+            windLabel, conditionLabel, weatherIcon);
+        weatherBox.setStyle("-fx-padding: 10; " +
+            "-fx-background-color: #333333;-fx-border-color: #555;");
+        weatherBox.setAlignment(Pos.TOP_LEFT);
+        weatherBox.setPrefSize(250, 300);
+        weatherBox.setMinSize(250, 300);
+        weatherBox.setMaxSize(250, 300);
+
+        setLabelTextWhite(
+            capitalLabel, populationLabel, currencyLabel,
+            tempLabel, feelsLikeLabel, humidityLabel, windLabel, conditionLabel
+        );
+
+        HBox infoBoxes = new HBox(20, countryBox, weatherBox);
+        infoBoxes.setAlignment(Pos.CENTER);
+
+        VBox root = new VBox(15, title, countryList, fetchButton,
+            spinnerBox, infoBoxes);
+        root.setStyle("-fx-padding: 20px; -fx-background-color: #1e1e1e;");
+        root.setAlignment(Pos.TOP_CENTER);
+
+        Scene scene = new Scene(root);
         stage.setScene(scene);
-        stage.setOnCloseRequest(event -> Platform.exit());
         stage.sizeToScene();
+        stage.setResizable(false);
+
+        stage.setTitle("Country & Weather Explorer");
         stage.show();
 
-    } // start
+        loadCountryNames();
+    }
 
-} // ApiApp
+
+
+    /**
+     * Applies a white text color style to all provided labels.
+     * This is used to ensure text remains visible on a dark background.
+     *
+     * @param labels the labels to apply the white text style to.
+     */
+    private void setLabelTextWhite(Label... labels) {
+        for (Label label : labels) {
+            label.setStyle("-fx-text-fill: white;");
+        }
+    }
+
+    /**
+     * Loads the list of countries by sending a request to the REST Countries API.
+     * Populates the ListView with country names that have capital cities.
+     * Runs on a background thread and updates the UI on the JavaFX Application Thread.
+     */
+    private void loadCountryNames() {
+        new Thread(() -> {
+            try {
+                String url = "https://restcountries.com/v3.1/all";
+                HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .build();
+                HttpResponse<String> response = HTTPCLIENT.send(request,
+                    HttpResponse.BodyHandlers.ofString());
+                Country[] countries = GSON.fromJson(response.body(), Country[].class);
+
+                Platform.runLater(() -> {
+                    for (Country country : countries) {
+                        if (country.capital != null && country.capital.length > 0) {
+                            countryNames.add(country.name.common);
+                        }
+                    }
+                    countryNames.sort(String::compareToIgnoreCase);
+                });
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
+
+    /**
+     * Fetches country and weather information for the selected country. Uses the
+     * REST Countries API to obtain metadata such as capital, population, currency,
+     * and flag. Then queries the OpenWeatherMap API using the country’s latitude
+     * and longitude to get current weather conditions.
+     *
+     * Updates the user interface with the retrieved information and handles errors gracefully.
+     *
+     * @param countryName the name of the country selected by the user.
+     */
+    private void fetchAndDisplay(String countryName) {
+        Platform.runLater(() -> loadingSpinner.setVisible(true));
+        new Thread(() -> {
+            try {
+                String encodedName = URLEncoder.encode(countryName,
+                    StandardCharsets.UTF_8).replace("+", "%20");
+                String url = "https://restcountries.com/v3.1/name/" +
+                    encodedName + "?fullText=true";
+                HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).build();
+                HttpResponse<String> response = HTTPCLIENT.send(request,
+                    HttpResponse.BodyHandlers.ofString());
+
+                if (response.statusCode() != 200) {
+                    throw new IOException("Failed to fetch country: HTTP" + response.statusCode());
+                }
+
+                Country[] countries = GSON.fromJson(response.body(), Country[].class);
+                Country country = countries[0];
+
+                String capital = country.capital[0];
+                String flagUrl = country.flags.png;
+                String currency = country.currencies.keySet().iterator().next();
+
+                double lat = country.latlng[0];
+                double lon = country.latlng[1];
+                String weatherUrl = String.format(
+                    "https://api.openweathermap.org/data/3.0/onecall?" +
+                    "lat=%.4f&lon=%.4f&exclude=minutely,hourly,daily,alerts&appid=%s",
+                    lat, lon, WEATHER_API_KEY);
+
+                HttpRequest weatherRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(weatherUrl))
+                    .build();
+                HttpResponse<String> weatherResponse = HTTPCLIENT.send(weatherRequest,
+                    HttpResponse.BodyHandlers.ofString());
+                WeatherOneCallResponse weather = GSON.fromJson(weatherResponse.body(),
+                    WeatherOneCallResponse.class);
+
+                Platform.runLater(() -> {
+                    countryHeader.setText(countryName);
+                    capitalLabel.setText("Capital: " + capital);
+                    populationLabel.setText("Population: " + country.population);
+                    currencyLabel.setText("Currency: " + currency + "\n");
+                    flagImageView.setImage(new Image(flagUrl));
+
+                    int tempC = Math.round((weather.current.temp - 273.15f));
+                    int feelsC = Math.round((weather.current.feelsLike - 273.15f));
+                    weatherHeader.setText(capital + "'s Current Weather");
+                    tempLabel.setText("Temp: " + tempC + "°C");
+                    feelsLikeLabel.setText("Feels Like: " + feelsC + "°C");
+                    humidityLabel.setText("Humidity: " + weather.current.humidity + "%");
+                    windLabel.setText("Wind: " + weather.current.windSpeed + " m/s");
+                    conditionLabel.setText("Condition: " + weather.current.weather[0].description);
+                    weatherIcon.setImage(new Image("https://openweathermap.org/img/wn/" +
+                        weather.current.weather[0].icon + "@2x.png"));
+                    loadingSpinner.setVisible(false);
+                });
+            } catch (IOException | InterruptedException e) {
+                e.printStackTrace();
+                Platform.runLater(() -> {
+                    loadingSpinner.setVisible(false);
+                    showError("Could not load data.");
+                });
+            }
+        }).start();
+    }
+
+    /**
+     * Displays an error alert dialog with the given message. Used to inform the
+     * user of issues such as failed network requests or missing data.
+     *
+     * @param message the error message to display in the alert dialog.
+     */
+    private void showError(String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR, message, ButtonType.OK);
+        alert.showAndWait();
+    }
+}
