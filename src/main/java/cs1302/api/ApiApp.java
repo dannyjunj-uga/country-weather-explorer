@@ -1,5 +1,6 @@
 package cs1302.api;
 
+import javafx.scene.Node;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -59,9 +60,38 @@ public class ApiApp extends Application {
     public void start(Stage stage) {
         Label title = new Label("🌍 Country & Weather Explorer 🌍");
         title.setStyle("-fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: white;");
+
+        VBox root = new VBox(15, title, createControls(),
+            new HBox(20, createCountryBox(), createWeatherBox()));
+        root.setStyle("-fx-padding: 20px; -fx-background-color: #1e1e1e;");
+        root.setAlignment(Pos.TOP_CENTER);
+
+        setLabelTextWhite(
+            capitalLabel, populationLabel, currencyLabel,
+            tempLabel, feelsLikeLabel, humidityLabel, windLabel, conditionLabel
+        );
+
+        Scene scene = new Scene(root);
+        stage.setScene(scene);
+        stage.setTitle("Country & Weather Explorer");
+        stage.sizeToScene();
+        stage.setResizable(false);
+        stage.show();
+
+        loadCountryNames();
+    }
+
+    /**
+     * Creates and returns a VBox containing the country selection ListView,
+     * a fetch button, and a loading spinner. This component handles user interaction
+     * for selecting a country and requesting information.
+     *
+     * @return a VBox containing the country selection UI and controls
+     */
+    private Node createControls() {
         countryList = new ListView<>(countryNames);
         countryList.setPrefHeight(200);
-        countryList.setStyle("-fx-border-color: #ccc;");
+        countryList.setPrefWidth(250);
 
         Button fetchButton = new Button("Get Info");
         fetchButton.setOnAction(e -> {
@@ -71,34 +101,62 @@ public class ApiApp extends Application {
             }
         });
 
+        loadingSpinner = new ProgressIndicator();
+        loadingSpinner.setVisible(false);
+        loadingSpinner.setPrefSize(50, 50);
+
+        HBox spinnerBox = new HBox(loadingSpinner);
+        spinnerBox.setAlignment(Pos.CENTER);
+
+        VBox box = new VBox(10, countryList, fetchButton, spinnerBox);
+        box.setAlignment(Pos.CENTER);
+        return box;
+    }
+
+    /**
+     * Creates and returns a VBox containing the country information UI elements,
+     * including labels for capital, population, currency, and a flag image.
+     * The header label is stored for dynamic updates.
+     *
+     * @return a VBox displaying country information
+     */
+    private Node createCountryBox() {
         countryHeader = new Label("Country Info");
-        countryHeader.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: white");
-        countryHeader.setPrefWidth(220);
+        countryHeader.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: white;");
         countryHeader.setWrapText(true);
-
-        capitalLabel = new Label("Capital: ");
-        populationLabel = new Label("Population: ");
-        currencyLabel = new Label("Currency: ");
-
-        flagImageView = new ImageView();
-        flagImageView.setFitWidth(150);
-        flagImageView.setPreserveRatio(true);
 
         Region spacer = new Region();
         spacer.setMinHeight(15);
 
-        VBox countryBox = new VBox(5, countryHeader, capitalLabel,
-            populationLabel, currencyLabel, spacer, flagImageView);
-        countryBox.setStyle("-fx-padding: 10; " +
-            "-fx-background-color: #2c2c2c; -fx-border-color: #444;");
-        countryBox.setAlignment(Pos.TOP_LEFT);
-        countryBox.setPrefSize(250,300);
-        countryBox.setMinSize(250,300);
-        countryBox.setMaxSize(250,300);
+        capitalLabel = new Label("Capital: ");
+        populationLabel = new Label("Population: ");
+        currencyLabel = new Label("Currency: ");
+        flagImageView = new ImageView();
+        flagImageView.setFitWidth(150);
+        flagImageView.setFitHeight(100);
+        flagImageView.setPreserveRatio(true);
 
-        weatherHeader = new Label("Capital's Current Weather");
+        HBox flagWrapper = new HBox(flagImageView);
+        flagWrapper.setAlignment(Pos.CENTER);
+
+        VBox box = new VBox(5, countryHeader, capitalLabel,
+            populationLabel, currencyLabel, spacer, flagWrapper);
+        box.setStyle("-fx-padding: 10; -fx-background-color: #2c2c2c; -fx-border-color: #444;");
+        box.setAlignment(Pos.TOP_LEFT);
+        box.setPrefSize(250, 300);
+        return box;
+    }
+
+    /**
+     * Creates and returns a VBox containing the weather information UI elements,
+     * including labels for temperature, humidity, wind, and condition, as well as
+     * an icon image. The header label is stored for dynamic updates if needed.
+     *
+     * @return a VBox displaying current weather conditions
+     */
+    private Node createWeatherBox() {
+        weatherHeader = new Label("Weather Info");
         weatherHeader.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: white;");
-        weatherHeader.setPrefWidth(220);
         weatherHeader.setWrapText(true);
 
         tempLabel = new Label("Temp: ");
@@ -108,49 +166,19 @@ public class ApiApp extends Application {
         conditionLabel = new Label("Condition: ");
         weatherIcon = new ImageView();
         weatherIcon.setFitWidth(100);
+        weatherIcon.setFitHeight(100);
         weatherIcon.setPreserveRatio(true);
 
-        loadingSpinner = new ProgressIndicator();
-        loadingSpinner.setVisible(false);
-        loadingSpinner.setPrefSize(50, 50);
+        HBox weatherIconWrapper = new HBox(weatherIcon);
+        weatherIconWrapper.setAlignment(Pos.CENTER);
 
-        HBox spinnerBox = new HBox(loadingSpinner);
-        spinnerBox.setAlignment(Pos.CENTER);
-
-        VBox weatherBox = new VBox(5, weatherHeader, tempLabel, feelsLikeLabel, humidityLabel,
-            windLabel, conditionLabel, weatherIcon);
-        weatherBox.setStyle("-fx-padding: 10; " +
-            "-fx-background-color: #333333;-fx-border-color: #555;");
-        weatherBox.setAlignment(Pos.TOP_LEFT);
-        weatherBox.setPrefSize(250, 300);
-        weatherBox.setMinSize(250, 300);
-        weatherBox.setMaxSize(250, 300);
-
-        setLabelTextWhite(
-            capitalLabel, populationLabel, currencyLabel,
-            tempLabel, feelsLikeLabel, humidityLabel, windLabel, conditionLabel
-        );
-
-        HBox infoBoxes = new HBox(20, countryBox, weatherBox);
-        infoBoxes.setAlignment(Pos.CENTER);
-
-        VBox root = new VBox(15, title, countryList, fetchButton,
-            spinnerBox, infoBoxes);
-        root.setStyle("-fx-padding: 20px; -fx-background-color: #1e1e1e;");
-        root.setAlignment(Pos.TOP_CENTER);
-
-        Scene scene = new Scene(root);
-        stage.setScene(scene);
-        stage.sizeToScene();
-        stage.setResizable(false);
-
-        stage.setTitle("Country & Weather Explorer");
-        stage.show();
-
-        loadCountryNames();
+        VBox box = new VBox(5, weatherHeader, tempLabel, feelsLikeLabel, humidityLabel, windLabel,
+            conditionLabel, weatherIconWrapper);
+        box.setStyle("-fx-padding: 10; -fx-background-color: #333333; -fx-border-color: #555;");
+        box.setAlignment(Pos.TOP_LEFT);
+        box.setPrefSize(250, 300);
+        return box;
     }
-
-
 
     /**
      * Applies a white text color style to all provided labels.
@@ -216,25 +244,20 @@ public class ApiApp extends Application {
                 HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).build();
                 HttpResponse<String> response = HTTPCLIENT.send(request,
                     HttpResponse.BodyHandlers.ofString());
-
                 if (response.statusCode() != 200) {
                     throw new IOException("Failed to fetch country: HTTP" + response.statusCode());
                 }
-
                 Country[] countries = GSON.fromJson(response.body(), Country[].class);
                 Country country = countries[0];
-
                 String capital = country.capital[0];
                 String flagUrl = country.flags.png;
                 String currency = country.currencies.keySet().iterator().next();
-
                 double lat = country.latlng[0];
                 double lon = country.latlng[1];
                 String weatherUrl = String.format(
                     "https://api.openweathermap.org/data/3.0/onecall?" +
                     "lat=%.4f&lon=%.4f&exclude=minutely,hourly,daily,alerts&appid=%s",
                     lat, lon, WEATHER_API_KEY);
-
                 HttpRequest weatherRequest = HttpRequest.newBuilder()
                     .uri(URI.create(weatherUrl))
                     .build();
@@ -242,14 +265,12 @@ public class ApiApp extends Application {
                     HttpResponse.BodyHandlers.ofString());
                 WeatherOneCallResponse weather = GSON.fromJson(weatherResponse.body(),
                     WeatherOneCallResponse.class);
-
                 Platform.runLater(() -> {
                     countryHeader.setText(countryName);
                     capitalLabel.setText("Capital: " + capital);
                     populationLabel.setText("Population: " + country.population);
                     currencyLabel.setText("Currency: " + currency + "\n");
                     flagImageView.setImage(new Image(flagUrl));
-
                     int tempC = Math.round((weather.current.temp - 273.15f));
                     int feelsC = Math.round((weather.current.feelsLike - 273.15f));
                     weatherHeader.setText(capital + "'s Current Weather");
